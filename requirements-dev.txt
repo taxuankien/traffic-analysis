@@ -1,0 +1,5 @@
+-r requirements-prod.txt
+PyQt6>=6.6
+pytest>=8.0
+pytest-mock>=3.12
+httpx>=0.27

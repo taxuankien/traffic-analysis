@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.6
+
+FROM node:20-alpine AS frontend-build
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS runtime
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TRAFFIC_DATA_DIR=/app/data \
+    TRAFFIC_MODELS_DIR=/app/models \
+    TRAFFIC_CONFIG_DIR=/app/config \
+    TRAFFIC_INFERENCE_CONFIG=/app/config/inference.yaml \
+    YOLO_CONFIG_DIR=/app/models/.ultralytics
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 python3.11-venv python3-pip \
+        libgl1 libglib2.0-0 ffmpeg curl tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.11 /usr/local/bin/python && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+
+WORKDIR /app
+COPY requirements-prod.txt ./
+# Cài PyTorch CUDA build trước rồi mới cài ultralytics để tránh CPU wheel ghi đè
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124 && \
+    pip install --no-cache-dir -r requirements-prod.txt
+
+COPY src/ ./src/
+COPY config/ ./config/
+COPY --from=frontend-build /build/dist ./frontend/dist
+
+RUN mkdir -p /app/data /app/models
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:8000/api/health || exit 1
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["uvicorn", "src.adapters.input.web.app:create_app", \
+     "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

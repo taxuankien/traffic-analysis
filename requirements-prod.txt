@@ -1,0 +1,15 @@
+# Inference + web (no PyQt6)
+ultralytics>=8.0
+supervision>=0.25
+numpy>=1.24
+pandas>=2.0
+opencv-python-headless>=4.9
+pyyaml>=6.0
+ruamel.yaml>=0.18
+psutil>=5.9
+nvidia-ml-py>=12.0; platform_system != "Darwin"
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+websockets>=12.0
+zipstream-ng>=1.7

@@ -1,0 +1,59 @@
+# =============================================================================
+# Cấu hình inference & tracking cho hệ thống traffic-analysis.
+#
+# File này được load tự động khi GUI/CLI khởi động. Có thể trỏ tới file khác
+# qua biến môi trường TRAFFIC_INFERENCE_CONFIG hoặc cờ --config (CLI).
+#
+# Tài liệu chi tiết & preset cho giao thông VN: docs/INFERENCE_TUNING.md
+# =============================================================================
+
+model:
+  weights: "models/yolov8x.pt"   # Path tới file .pt (tương đối project root); ví dụ khác: yolov8n.pt, yolov8x.pt
+  device: null                    # null = auto (CUDA nếu có); hoặc "cpu", "cuda:0", "mps"
+  imgsz: 960                      # Kích thước ảnh inference (bội số 32). Tăng lên 1280/1920 cho video độ phân giải thấp / object nhỏ
+  half: false                     # FP16 — chỉ bật khi có GPU NVIDIA (tăng tốc độ, giảm độ chính xác chút)
+  max_det: 1000                    # Số detection tối đa mỗi frame; tăng 500–1000 cho VN giờ cao điểm (xe máy đông)
+  agnostic_nms: false             # NMS xuyên class; thường giữ false để không bị 1 ô tô nuốt motorcycle gần đó
+
+detection:
+  confidence: 0.15                # Ngưỡng tin cậy tối thiểu [0.0, 1.0]; giảm 0.15–0.20 cho video mờ / xe máy bị che
+  iou: 0.4                        # Ngưỡng NMS [0.0, 1.0]; giảm 0.5–0.6 cho cảnh đông để bớt suppress nhầm
+  class_ids: [2, 3, 5, 7]         # COCO IDs: 2=car, 3=motorcycle, 5=bus, 7=truck
+
+detection_roi:                    # Vùng cần detect — crop frame TRƯỚC khi đưa vào YOLO để giảm khối lượng tính toán
+  enabled: false                  # false = detect toàn khung hình (giữ hành vi cũ)
+  # Toạ độ chuẩn hoá [x_min, y_min, x_max, y_max] trong [0.0, 1.0] (gốc trên-trái = 0,0).
+  # Ví dụ cắt bỏ 20% trên cùng (vd phần trời, biển hiệu) và 10% dưới cùng (vd vỉa hè):
+  #   bounds: [0.0, 0.20, 1.0, 0.90]
+  # Bbox detect được tự dịch về toạ độ frame gốc nên ROI/zone/line counting không cần đổi.
+  bounds: [0.0, 0.0, 1.0, 1.0]
+
+tracking:
+  track_activation_threshold: 0.25  # Conf tối thiểu để bắt đầu track mới (đồng bộ với detection.confidence)
+  lost_track_buffer: 30             # Số frame giữ track đã mất trước khi xoá; tăng 45–60 cho VN (xe máy luồn lách)
+  minimum_matching_threshold: 0.8   # IoU để gán detection vào track; giảm 0.6–0.7 cho object nhỏ chuyển động nhanh
+  minimum_consecutive_frames: 3     # Số frame liên tục để xác nhận track; giảm xuống 2 nếu hay miss xe máy
+
+speed:
+  min_frames: 5                   # Track ngắn hơn ngưỡng này bị loại khỏi tính vận tốc trung bình (giảm noise)
+
+analysis:
+  default_interval_seconds: 30.0  # Độ dài 1 interval khi GUI/CLI không truyền giá trị riêng
+  frame_skip: 1                   # Chỉ chạy detect+track trên 1/N frame để tăng tốc.
+                                  # 1 = xử lý mọi frame (mặc định, không mất chính xác).
+                                  # 2 = bỏ 1 frame mỗi 2 (an toàn cho 25–30 FPS, giao thông VN).
+                                  # 3 = bỏ 2 frame mỗi 3 (chấp nhận được, nên tune tracking đi kèm).
+                                  # ≥4: dễ vỡ tracker, ID bị sinh trùng → đếm sai.
+                                  # Khi bật >1, cân nhắc:
+                                  #   tracking.lost_track_buffer 60, minimum_matching_threshold 0.6
+                                  # Video output gán nhãn sẽ lưu ở fps = original_fps / frame_skip.
+
+queue:
+  stopped_speed_kmh: 5.0          # Vận tốc tối đa để xem là đang xếp hàng (km/h)
+  window_frames: 5                # Số frame liên tục để xác nhận trạng thái dừng
+
+vehicle_pce:                      # Passenger Car Equivalent (TCVN 4054)
+  car: 1.0
+  motorcycle: 0.25                # Chuẩn VN; có thể giảm 0.25 (khu phố cũ HN/HCM thuần xe máy) hoặc tăng 0.35 (quốc lộ)
+  bus: 3.0
+  truck: 2.5

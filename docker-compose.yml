@@ -1,0 +1,17 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: traffic-analysis:cpu
+    container_name: traffic-analysis
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./config:/app/config
+    environment:
+      TRAFFIC_WEB_ORIGINS: "http://localhost:8080"
+      TRAFFIC_MAX_JOBS: "1"
+    restart: unless-stopped

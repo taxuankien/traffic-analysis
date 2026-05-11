@@ -1,0 +1,65 @@
+# ============================================================
+#  Traffic Analysis — .gitignore
+# ============================================================
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+env/
+*.whl
+
+# ── Node / Frontend ──────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ── YOLO model weights (large binary files) ──────────────────
+models/*.pt
+models/*.onnx
+models/*.engine
+
+# ── Runtime data (uploads, results, frames) ──────────────────
+data/sources/
+data/results/
+data/frames/
+data/exports/
+data/configs/
+data/nga3_0905/
+
+# ── IDE / Editors ────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Testing / Coverage ───────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── OS / Temp ────────────────────────────────────────────────
+*.log
+*.tmp
+.tmp.driveupload/
+
+# ── Docker ───────────────────────────────────────────────────
+# Keep Dockerfile and compose files, ignore build artifacts
+
+# ── Claude / AI assistants ───────────────────────────────────
+.claude/
+
+# ── Misc ─────────────────────────────────────────────────────
+package-lock.json

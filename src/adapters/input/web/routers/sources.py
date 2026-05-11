@@ -44,9 +44,27 @@ def _safe_filename(name: str) -> str:
     return cleaned or "video"
 
 
+def _backfill_metadata(source: VideoSource, container: Container) -> VideoSource:
+    """Lazy-fill width/height/fps if missing (legacy sources uploaded before metadata logic)."""
+    if source.width is not None and source.height is not None:
+        return source
+    try:
+        meta = container.video_reader.get_metadata(source.path)
+        source.fps = source.fps or meta.fps
+        source.total_frames = source.total_frames or meta.total_frames
+        source.width = source.width or meta.width
+        source.height = source.height or meta.height
+        container.source_repo.save(source)
+        logger.info("Backfilled metadata for %s: %dx%d", source.id, source.width, source.height)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Cannot backfill metadata for %s: %s", source.id, exc)
+    return source
+
+
 @router.get("", response_model=list[VideoSourceResponse])
 def list_sources(container: Container = Depends(get_container)) -> list[VideoSourceResponse]:
-    return [_to_response(s) for s in container.data_management_service().list_sources()]
+    sources = container.data_management_service().list_sources()
+    return [_to_response(_backfill_metadata(s, container)) for s in sources]
 
 
 @router.get("/{source_id}", response_model=VideoSourceResponse)
@@ -54,7 +72,7 @@ def get_source(
     source_id: str, container: Container = Depends(get_container)
 ) -> VideoSourceResponse:
     source = container.data_management_service().get_source(source_id)
-    return _to_response(source)
+    return _to_response(_backfill_metadata(source, container))
 
 
 @router.post(

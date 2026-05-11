@@ -69,8 +69,14 @@ export default function ROIEditorPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const videoW = source?.metadata?.width || 1920;
-  const videoH = source?.metadata?.height || 1080;
+  // Track the image's actual pixel dimensions from onLoad.
+  // This is THE authoritative source for video resolution, since the frame
+  // endpoint returns the original-resolution PNG.
+  const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null);
+
+  // Priority: image naturalWidth > API metadata > fallback 1920×1080
+  const videoW = imgNatural?.w || source?.metadata?.width || 1920;
+  const videoH = imgNatural?.h || source?.metadata?.height || 1080;
   const totalSeconds = source?.metadata ? source.metadata.total_frames / source.metadata.fps : 300;
 
   useEffect(() => {
@@ -127,6 +133,15 @@ export default function ROIEditorPage() {
   }, [polygons, lines, currentPoints, source, tool, videoW, videoH]);
 
   useEffect(() => { draw(); }, [draw]);
+
+  // Capture real image dimensions when the frame loads
+  const handleImgLoad = useCallback(() => {
+    const img = imgRef.current;
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      setImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    }
+    draw();
+  }, [draw]);
 
   // Also redraw on window resize
   useEffect(() => {
@@ -197,7 +212,7 @@ export default function ROIEditorPage() {
       <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div style={{ position: 'relative', flex: 1, background: '#000', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            <img ref={imgRef} src={imgSrc} alt="frame" onLoad={draw} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img ref={imgRef} src={imgSrc} alt="frame" onLoad={handleImgLoad} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             <canvas ref={canvasRef} onClick={handleCanvasClick} onDoubleClick={handleCanvasDblClick} style={{ position: 'absolute', inset: 0, cursor: tool === 'select' ? 'default' : 'crosshair' }} />
           </div>
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>

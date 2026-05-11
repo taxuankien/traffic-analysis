@@ -72,3 +72,25 @@ export function getSchema(): Promise<Record<string, FieldMeta>> {
 export function listModels(): Promise<ModelFileInfo[]> {
   return apiGet<ModelFileInfo[]>('/system/models');
 }
+
+export interface CatalogModel {
+  name: string;
+  family: string;
+  variant: string;
+  size_mb: number;
+  downloaded: boolean;
+}
+
+export interface DownloadResponse {
+  model_name: string;
+  status: 'downloading' | 'done' | 'already_exists' | 'failed';
+  message: string;
+}
+
+export function getCatalog(): Promise<CatalogModel[]> {
+  return apiGet<CatalogModel[]>('/system/models/catalog');
+}
+
+export function downloadModel(modelName: string): Promise<DownloadResponse> {
+  return apiPost<DownloadResponse>('/system/models/download', { model_name: modelName });
+}

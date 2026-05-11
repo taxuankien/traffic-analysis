@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, RotateCcw, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Save, RotateCcw, X, AlertCircle, RefreshCw, Download, Check, Loader2 } from 'lucide-react';
 import { useInferenceConfig } from '../hooks/useInferenceConfig';
 import { type InferenceConfig } from '../api/inference';
 import { ConfigSection } from '../components/config-form/ConfigSection';
@@ -12,11 +12,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 
 export default function InferenceSettingsPage() {
-  const { config, schema, models, isLoading, save, reset, refetchModels } = useInferenceConfig();
+  const { config, schema, models, catalog, isLoading, save, reset, download, refetchModels } = useInferenceConfig();
   const { toast } = useToast();
   const [form, setForm] = useState<InferenceConfig | null>(null);
   const [dirty, setDirty] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
 
   useEffect(() => {
     if (config && !form) setForm(structuredClone(config));
@@ -79,7 +80,44 @@ export default function InferenceSettingsPage() {
     }
   };
 
-  const modelOptions = models?.map(m => ({ value: m.name, label: `${m.name} (${m.size_mb.toFixed(1)} MB)` })) || [];
+  const handleDownload = async (modelName: string) => {
+    setDownloadingModel(modelName);
+    try {
+      const result = await download.mutateAsync(modelName);
+      if (result.status === 'done' || result.status === 'already_exists') {
+        toast('success', result.message);
+      } else {
+        toast('info', result.message);
+      }
+    } catch (err: unknown) {
+      toast('error', err instanceof Error ? err.message : `Tải ${modelName} thất bại`);
+    }
+    setDownloadingModel(null);
+  };
+
+  // Build model options: local models + catalog models (not yet downloaded)
+  const localNames = new Set(models?.map(m => m.name) || []);
+  const modelOptions = [
+    ...(models?.map(m => ({
+      value: m.name,
+      label: `${m.name} (${m.size_mb.toFixed(1)} MB) ✅`,
+    })) || []),
+  ];
+
+  // Add catalog models that are not yet downloaded as options too
+  const catalogNotDownloaded = catalog?.filter(c => !localNames.has(c.name)) || [];
+  for (const c of catalogNotDownloaded) {
+    modelOptions.push({
+      value: c.name,
+      label: `${c.name} — ${c.family} ${c.variant} (~${c.size_mb} MB) ⬇️ cần tải`,
+    });
+  }
+
+  // If current weights not in any option, add it
+  if (!modelOptions.find(o => o.value === form.model.weights)) {
+    modelOptions.unshift({ value: form.model.weights, label: form.model.weights });
+  }
+
   const deviceOptions = [
     { value: '', label: 'Auto' },
     { value: 'cpu', label: 'CPU' },
@@ -91,6 +129,9 @@ export default function InferenceSettingsPage() {
   const s = schema || {};
   const desc = (key: string) => s[key]?.description || '';
 
+  // Check if the selected model needs download
+  const selectedNeedsDownload = !localNames.has(form.model.weights) && catalog?.some(c => c.name === form.model.weights);
+
   return (
     <div className="animate-fade-in" style={{ padding: 32, maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
@@ -101,9 +142,42 @@ export default function InferenceSettingsPage() {
         </div>
       </div>
 
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 80 }}>
+      <div className="glass-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
         <ConfigSection title="Model">
           <SelectInput label="Weights" value={form.model.weights} onChange={(v) => update('model', 'weights', v)} options={modelOptions.length ? modelOptions : [{ value: form.model.weights, label: form.model.weights }]} description={desc('model.weights')} />
+
+          {/* Download button if selected model not downloaded */}
+          {selectedNeedsDownload && (
+            <div style={{
+              padding: '10px 16px',
+              marginTop: 4,
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05))',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: '0.8125rem',
+            }}>
+              <Download size={16} style={{ color: '#f59e0b' }} />
+              <span style={{ flex: 1, color: '#fbbf24' }}>
+                Model <strong>{form.model.weights}</strong> chưa được tải. Cần tải trước khi dùng.
+              </span>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => handleDownload(form.model.weights)}
+                disabled={downloadingModel === form.model.weights}
+                style={{ minWidth: 100 }}
+              >
+                {downloadingModel === form.model.weights ? (
+                  <><Loader2 size={14} className="animate-spin" /> Đang tải...</>
+                ) : (
+                  <><Download size={14} /> Tải ngay</>
+                )}
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
             <div style={{ flex: 1 }}>
               <SelectInput label="Device" value={form.model.device || ''} onChange={(v) => update('model', 'device', v || null)} options={deviceOptions} description={desc('model.device')} />
@@ -154,6 +228,55 @@ export default function InferenceSettingsPage() {
           <NumberInput label="Bus" value={form.vehicle_pce.bus} onChange={(v) => update('vehicle_pce', 'bus', v)} min={0.01} max={10} step={0.1} description={desc('vehicle_pce.bus')} />
           <NumberInput label="Truck" value={form.vehicle_pce.truck} onChange={(v) => update('vehicle_pce', 'truck', v)} min={0.01} max={10} step={0.1} description={desc('vehicle_pce.truck')} />
         </ConfigSection>
+      </div>
+
+      {/* Model Catalog Section */}
+      <div className="glass-card" style={{ padding: 24, marginBottom: 80 }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Download size={18} /> Kho Model YOLO
+        </h2>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: 16 }}>
+          Chọn và tải model từ thư viện Ultralytics. Model sẽ được tự động tải về thư mục <code>models/</code>.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+          {catalog?.map(m => (
+            <div key={m.name} style={{
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: `1px solid ${m.downloaded ? 'rgba(34,197,94,0.3)' : 'var(--color-border)'}`,
+              background: m.downloaded ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.02)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              transition: 'all 0.2s',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{m.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  {m.family} {m.variant} • ~{m.size_mb} MB
+                </div>
+              </div>
+              {m.downloaded ? (
+                <span style={{ color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 500 }}>
+                  <Check size={14} /> Đã tải
+                </span>
+              ) : (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleDownload(m.name)}
+                  disabled={downloadingModel !== null}
+                  style={{ minWidth: 70, fontSize: '0.75rem' }}
+                >
+                  {downloadingModel === m.name ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <><Download size={12} /> Tải</>
+                  )}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Sticky save bar */}

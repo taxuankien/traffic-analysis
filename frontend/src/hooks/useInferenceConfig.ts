@@ -5,6 +5,8 @@ import {
   resetConfig,
   getSchema,
   listModels,
+  getCatalog,
+  downloadModel,
   type InferenceConfig,
 } from '../api/inference';
 
@@ -29,6 +31,12 @@ export function useInferenceConfig() {
     staleTime: 30_000,
   });
 
+  const catalogQuery = useQuery({
+    queryKey: ['system-models-catalog'],
+    queryFn: getCatalog,
+    staleTime: 30_000,
+  });
+
   const saveMutation = useMutation({
     mutationFn: (data: InferenceConfig) => putConfig(data),
     onSuccess: () => {
@@ -43,13 +51,28 @@ export function useInferenceConfig() {
     },
   });
 
+  const downloadMutation = useMutation({
+    mutationFn: (modelName: string) => downloadModel(modelName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['system-models'] });
+      qc.invalidateQueries({ queryKey: ['system-models-catalog'] });
+    },
+  });
+
+  const refetchAll = () => {
+    qc.invalidateQueries({ queryKey: ['system-models'] });
+    qc.invalidateQueries({ queryKey: ['system-models-catalog'] });
+  };
+
   return {
     config: configQuery.data,
     schema: schemaQuery.data,
     models: modelsQuery.data,
+    catalog: catalogQuery.data,
     isLoading: configQuery.isLoading || schemaQuery.isLoading,
     save: saveMutation,
     reset: resetMutation,
-    refetchModels: () => qc.invalidateQueries({ queryKey: ['system-models'] }),
+    download: downloadMutation,
+    refetchModels: refetchAll,
   };
 }

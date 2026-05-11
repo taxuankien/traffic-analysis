@@ -95,7 +95,28 @@ export default function InferenceSettingsPage() {
     setDownloadingModel(null);
   };
 
-  // Build model options: local models + catalog models (not yet downloaded)
+  // ── Hardcoded fallback catalog (always available regardless of backend) ──
+  const FALLBACK_CATALOG = [
+    { name: 'yolo11n.pt', family: 'YOLOv11', variant: 'Nano',   size_mb: 5.4 },
+    { name: 'yolo11s.pt', family: 'YOLOv11', variant: 'Small',  size_mb: 18.4 },
+    { name: 'yolo11m.pt', family: 'YOLOv11', variant: 'Medium', size_mb: 38.8 },
+    { name: 'yolo11l.pt', family: 'YOLOv11', variant: 'Large',  size_mb: 49.0 },
+    { name: 'yolo11x.pt', family: 'YOLOv11', variant: 'XLarge', size_mb: 109.3 },
+    { name: 'yolov8n.pt', family: 'YOLOv8', variant: 'Nano',   size_mb: 6.2 },
+    { name: 'yolov8s.pt', family: 'YOLOv8', variant: 'Small',  size_mb: 21.5 },
+    { name: 'yolov8m.pt', family: 'YOLOv8', variant: 'Medium', size_mb: 49.7 },
+    { name: 'yolov8l.pt', family: 'YOLOv8', variant: 'Large',  size_mb: 83.7 },
+    { name: 'yolov8x.pt', family: 'YOLOv8', variant: 'XLarge', size_mb: 130.5 },
+  ];
+
+  // Merge: backend catalog takes priority, fallback fills gaps
+  const catalogNames = new Set(catalog?.map(c => c.name) || []);
+  const mergedCatalog = [
+    ...(catalog || []),
+    ...FALLBACK_CATALOG.filter(f => !catalogNames.has(f.name)).map(f => ({ ...f, downloaded: false })),
+  ];
+
+  // Build dropdown: local models (✅) + not-yet-downloaded catalog models (⬇️)
   const localNames = new Set(models?.map(m => m.name) || []);
   const modelOptions = [
     ...(models?.map(m => ({
@@ -104,9 +125,7 @@ export default function InferenceSettingsPage() {
     })) || []),
   ];
 
-  // Add catalog models that are not yet downloaded as options too
-  const catalogNotDownloaded = catalog?.filter(c => !localNames.has(c.name)) || [];
-  for (const c of catalogNotDownloaded) {
+  for (const c of mergedCatalog.filter(c => !localNames.has(c.name))) {
     modelOptions.push({
       value: c.name,
       label: `${c.name} — ${c.family} ${c.variant} (~${c.size_mb} MB) ⬇️ cần tải`,
@@ -239,12 +258,14 @@ export default function InferenceSettingsPage() {
           Chọn và tải model từ thư viện Ultralytics. Model sẽ được tự động tải về thư mục <code>models/</code>.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-          {catalog?.map(m => (
+          {mergedCatalog.map(m => {
+            const isDownloaded = m.downloaded || localNames.has(m.name);
+            return (
             <div key={m.name} style={{
               padding: '12px 16px',
               borderRadius: 'var(--radius-md)',
-              border: `1px solid ${m.downloaded ? 'rgba(34,197,94,0.3)' : 'var(--color-border)'}`,
-              background: m.downloaded ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${isDownloaded ? 'rgba(34,197,94,0.3)' : 'var(--color-border)'}`,
+              background: isDownloaded ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.02)',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
@@ -256,7 +277,7 @@ export default function InferenceSettingsPage() {
                   {m.family} {m.variant} • ~{m.size_mb} MB
                 </div>
               </div>
-              {m.downloaded ? (
+              {isDownloaded ? (
                 <span style={{ color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 500 }}>
                   <Check size={14} /> Đã tải
                 </span>
@@ -275,7 +296,8 @@ export default function InferenceSettingsPage() {
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
